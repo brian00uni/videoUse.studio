@@ -1,0 +1,8 @@
+fastapi
+uvicorn[standard]
+pydantic>=2
+requests
+# transcription — pick one when implementing /transcribe
+# faster-whisper
+# transformers
+# ffmpeg is provided by the HF Space image (apt: ffmpeg)
