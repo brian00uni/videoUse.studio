@@ -64,8 +64,9 @@ supabase db push
 3. **Claude API** — Vercel 프로젝트 env에 `ANTHROPIC_API_KEY` 설정
    (`/api/reason`가 사용).
 
-> 렌더 결과 다운로드를 켜려면 워커 `/render`에 `upload_url`(Supabase presigned PUT)을
-> 넘기고, 그 경로를 앱에서 서명해 링크로 노출하면 됩니다.
+> 렌더 결과 다운로드(presigned PUT/GET)와 세션 메모리 저장까지 코드에 연결돼 있습니다.
+
+**직접 해야 할 단계별 가이드는 [`SETUP.md`](SETUP.md)** (버킷·정책 SQL 포함).
 
 ## 로드맵
 

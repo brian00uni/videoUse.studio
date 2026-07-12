@@ -19,6 +19,8 @@ export async function reasonEdl(input: {
   sourceIds: string[];
   brief?: string;
   target?: string;
+  currentRanges?: EdlRange[]; // re-edit: revise this instead of starting over
+  feedback?: string;
 }): Promise<ReasonResult> {
   const r = await fetch("/api/reason", {
     method: "POST",

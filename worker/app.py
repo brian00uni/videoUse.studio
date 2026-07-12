@@ -91,8 +91,12 @@ def render(req: RenderRequest, x_worker_token: str | None = Header(None)) -> dic
         )
 
         if req.upload_url:
+            # Supabase presigned upload URL (from createSignedUploadUrl) — raw PUT.
             with open(out, "rb") as f:
-                put = requests.put(req.upload_url, data=f, timeout=300)
+                put = requests.put(
+                    req.upload_url, data=f, timeout=300,
+                    headers={"content-type": "video/mp4", "x-upsert": "true"},
+                )
                 put.raise_for_status()
             return {"status": "done", "uploaded": True}
 

@@ -2,10 +2,12 @@ import { useState } from "react";
 import { supabase } from "../lib/supabase";
 import { packPhrases, renderPacked } from "../lib/pack";
 import { reasonEdl, transcribe, render } from "../lib/api";
+import { createProject, addSource, saveEdl, appendSession } from "../lib/db";
 import type { Edl, EdlRange } from "../lib/types";
 import { btn } from "./Auth";
 
 const BUCKET = "sources";
+const RENDERS = "renders";
 const SOURCE_ID = "S0"; // single-source MVP; multi-source is additive
 
 type Stage = "upload" | "transcribing" | "ready" | "reasoning" | "edl" | "rendering" | "done";
@@ -19,8 +21,10 @@ export function Studio() {
   const [stage, setStage] = useState<Stage>("upload");
   const [err, setErr] = useState<string | null>(null);
   const [path, setPath] = useState<string | null>(null);
+  const [projectId, setProjectId] = useState<string | null>(null);
   const [transcript, setTranscript] = useState<Transcript | null>(null);
   const [brief, setBrief] = useState("");
+  const [feedback, setFeedback] = useState("");
   const [ranges, setRanges] = useState<EdlRange[]>([]);
   const [grade, setGrade] = useState<string | undefined>();
   const [resultUrl, setResultUrl] = useState<string | null>(null);
@@ -48,6 +52,10 @@ export function Studio() {
       const url = await signedUrl(key);
       const tr = await transcribe(url);
       setTranscript(tr);
+      // Best-effort persistence (never blocks the pipeline).
+      const pid = await createProject(file.name);
+      setProjectId(pid);
+      if (pid) await addSource(pid, key, file.name, tr.duration, tr);
       setStage("ready");
     } catch (e) {
       fail(e);
@@ -74,22 +82,56 @@ export function Studio() {
     }
   }
 
+  async function onReedit() {
+    if (!packed || !feedback.trim()) return;
+    setStage("reasoning");
+    setErr(null);
+    try {
+      const res = await reasonEdl({
+        packed,
+        sourceIds: [SOURCE_ID],
+        brief,
+        currentRanges: ranges,
+        feedback,
+      });
+      setRanges(res.ranges);
+      setGrade(res.grade);
+      setFeedback("");
+      setStage("edl");
+    } catch (e) {
+      fail(e);
+      setStage("edl");
+    }
+  }
+
   async function onRender() {
-    if (!path) return;
+    if (!path || !supabase) return;
     setStage("rendering");
     setErr(null);
     try {
       const url = await signedUrl(path);
-      const edl: Edl = {
-        version: 1,
-        sources: { [SOURCE_ID]: url },
-        ranges,
-        grade,
-      };
-      const out = await render(edl, { [SOURCE_ID]: url });
-      // Worker returns {status, size_bytes} in dev; a real deploy uploads and
-      // returns an output path we'd sign here. Surface whatever we get.
-      setResultUrl(out.output_url ?? null);
+      const edl: Edl = { version: 1, sources: { [SOURCE_ID]: url }, ranges, grade };
+
+      // Presigned PUT target for the worker to upload the finished mp4 into.
+      const outPath = `${Date.now()}-final.mp4`;
+      const up = await supabase.storage.from(RENDERS).createSignedUploadUrl(outPath);
+      if (up.error) throw up.error;
+
+      await render(edl, { [SOURCE_ID]: url }, up.data.signedUrl);
+
+      // Sign a GET url for download.
+      const dl = await supabase.storage.from(RENDERS).createSignedUrl(outPath, 3600);
+      if (dl.error) throw dl.error;
+      setResultUrl(dl.data.signedUrl);
+
+      // Persist the final EDL + a session-memory entry (best-effort).
+      if (projectId) {
+        await saveEdl(projectId, edl, "done", outPath);
+        await appendSession(projectId, {
+          strategy: brief || "auto: filler/dead-space removal",
+          decisions: `${ranges.length} ranges kept, grade=${grade ?? "none"}`,
+        });
+      }
       setStage("done");
     } catch (e) {
       fail(e);
@@ -148,9 +190,22 @@ export function Studio() {
             </div>
           ))}
           {stage === "edl" && (
-            <button onClick={onRender} style={{ ...btn, marginTop: 12 }}>
-              렌더링
-            </button>
+            <>
+              <textarea
+                placeholder="대화로 다시 편집 (예: 더 짧게, 마지막 웃는 부분 살려줘, 인트로 빼줘)"
+                value={feedback}
+                onChange={(e) => setFeedback(e.target.value)}
+                style={{ ...pre, width: "100%", minHeight: 48, marginTop: 12 }}
+              />
+              <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
+                <button onClick={onReedit} disabled={!feedback.trim()} style={ghostBtn}>
+                  다시 편집
+                </button>
+                <button onClick={onRender} style={btn}>
+                  렌더링
+                </button>
+              </div>
+            </>
           )}
           {stage === "rendering" && <p style={{ color: "var(--muted)" }}>렌더 중… (HF 워커)</p>}
           {stage === "done" &&
@@ -223,6 +278,16 @@ function Panel({ title, children }: { title: string; children: React.ReactNode }
     </section>
   );
 }
+
+const ghostBtn: React.CSSProperties = {
+  padding: "10px 16px",
+  borderRadius: 10,
+  border: "1px solid var(--border)",
+  background: "transparent",
+  color: "var(--text)",
+  fontWeight: 600,
+  cursor: "pointer",
+};
 
 const pre: React.CSSProperties = {
   fontFamily: "ui-monospace, SFMono-Regular, monospace",

@@ -53,11 +53,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return;
   }
 
-  const { packed, sourceIds, brief, target } = req.body ?? {};
+  const { packed, sourceIds, brief, target, currentRanges, feedback } = req.body ?? {};
   if (!packed || !Array.isArray(sourceIds) || !sourceIds.length) {
     res.status(400).json({ error: "packed (string) and sourceIds (string[]) required" });
     return;
   }
+
+  // On a re-edit turn, show Claude the current EDL and the user's feedback so it
+  // revises rather than starting over.
+  const revision =
+    Array.isArray(currentRanges) && currentRanges.length
+      ? [
+          "",
+          "Current EDL (revise this, don't start from scratch):",
+          JSON.stringify(currentRanges, null, 2),
+          "",
+          `User feedback: ${feedback ?? "(none)"}`,
+        ].join("\n")
+      : "";
 
   const userMsg = [
     `Source ids: ${sourceIds.join(", ")}`,
@@ -66,6 +79,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     "",
     "Packed transcript:",
     packed,
+    revision,
   ]
     .filter(Boolean)
     .join("\n");
