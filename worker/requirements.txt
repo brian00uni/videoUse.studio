@@ -2,7 +2,6 @@ fastapi
 uvicorn[standard]
 pydantic>=2
 requests
-# transcription — pick one when implementing /transcribe
-# faster-whisper
-# transformers
-# ffmpeg is provided by the HF Space image (apt: ffmpeg)
+faster-whisper
+# ffmpeg is provided by the Docker image (apt: ffmpeg), not pip.
+# Multi-speaker diarization (optional, later): pyannote.audio
