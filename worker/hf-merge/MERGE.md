@@ -14,16 +14,25 @@
 
 > `vu_` 접두어로 네임스페이스해서 기존 파일과 충돌하지 않습니다.
 
-## 2. app.py에 2줄 추가
+## 2. app.py에 2줄 추가 (배치 순서 중요!)
 
-Space의 `app.py`에서 `app = FastAPI(...)` **아래** 아무 곳에 추가:
+- `from vu_routes import router as vu_router` → 파일 상단 import 근처 (아무 데나 OK)
+- `app.include_router(vu_router)` → **반드시 `app = FastAPI(...)` 아래.
+  헷갈리면 그냥 파일 맨 끝(마지막 줄)에 두세요.**
 
 ```python
-from vu_routes import router as vu_router
-app.include_router(vu_router)
+from fastapi import FastAPI
+from vu_routes import router as vu_router   # 상단 import
+
+app = FastAPI(...)        # 기존 app 생성
+# ... 기존 라우트들 (/, /remove) ...
+
+app.include_router(vu_router)   # ← app 생성 뒤 / 파일 끝
 ```
 
-(변수명이 `app`이 아니면 그 이름에 맞춰 `include_router` 호출)
+> ⚠️ `app.include_router`를 `app = FastAPI()` **위에** 두면
+> `NameError: name 'app' is not defined` 로 죽습니다.
+> (변수명이 `app`이 아니면 Dockerfile의 `uvicorn <module>:<name>` 의 `<name>`에 맞추세요.)
 
 ## 3. requirements.txt에 추가
 
