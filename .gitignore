@@ -33,3 +33,5 @@ media/
 *.mov
 *.srt
 !static/**/*.mp4
+.vercel
+.env*
