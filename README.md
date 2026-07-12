@@ -52,6 +52,21 @@ supabase db push
 # 또는 supabase/migrations/0001_init.sql 을 SQL 에디터에 붙여넣기
 ```
 
+## 라이브로 돌리기 (Phase 1 MVP)
+
+프론트엔드 플로우(업로드 → 전사 → 컷 제안 → 렌더 → 다운로드)는 구현돼 있고,
+아래 3개 외부 서비스만 연결하면 동작합니다:
+
+1. **Supabase 프로젝트** — `supabase/migrations/0001_init.sql` 적용, Storage에
+   `sources` 버킷 생성, `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` 설정.
+2. **HF Space 워커** — `worker/`를 Docker Space로 배포하고 `VITE_WORKER_URL` 설정
+   (`worker/README.md` 참고).
+3. **Claude API** — Vercel 프로젝트 env에 `ANTHROPIC_API_KEY` 설정
+   (`/api/reason`가 사용).
+
+> 렌더 결과 다운로드를 켜려면 워커 `/render`에 `upload_url`(Supabase presigned PUT)을
+> 넘기고, 그 경로를 앱에서 서명해 링크로 노출하면 됩니다.
+
 ## 로드맵
 
 - **Phase 1 (MVP)** — 업로드 → 전사 → 필러/공백 자동 컷 제안 → 렌더 → 다운로드
