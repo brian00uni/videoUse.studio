@@ -59,7 +59,7 @@ function SetupGate({ workerUrl }: { workerUrl?: string }) {
       </p>
       <Row label="VITE_SUPABASE_URL / ANON_KEY" ok={false} />
       <Row label="VITE_WORKER_URL (HF Space)" ok={Boolean(workerUrl)} />
-      <Row label="ANTHROPIC_API_KEY (Vercel 서버 env)" ok={false} />
+      <Row label="GROQ_API_KEY (Vercel 서버 env · 무료)" ok={false} />
       <p style={{ color: "var(--muted)", fontSize: 14, marginBottom: 0 }}>
         자세한 내용은 <code>README.md</code> / <code>docs/ARCHITECTURE.md</code>.
       </p>

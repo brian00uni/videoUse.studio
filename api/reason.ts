@@ -1,11 +1,14 @@
 // Vercel serverless function: read a packed transcript, decide the cuts, emit an EDL.
-// This is the "LLM reasons over text" step of the pipeline — Claude never sees
-// the video, only the transcript.
+// Uses Groq (free tier, OpenAI-compatible) for the LLM reasoning — the LLM never
+// sees the video, only the transcript.
 
-import Anthropic from "@anthropic-ai/sdk";
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 
-const client = new Anthropic(); // reads ANTHROPIC_API_KEY
+// Vercel Hobby allows up to 60s; Groq is fast but give headroom.
+export const maxDuration = 60;
+
+const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
+const MODEL = "llama-3.3-70b-versatile";
 
 const SYSTEM = `You are a video editor. You read a packed transcript (phrase-level
 lines with [start-end] timestamps per source) and decide which ranges to keep,
@@ -17,39 +20,26 @@ Rules:
 - When multiple takes of the same line exist, keep the cleanest one.
 - Preserve punchlines, laughs, and emphasis beats; extend past them to include reactions.
 - Order the kept ranges into a coherent final cut that matches the user's brief.
-- 'start'/'end' are seconds within the named source. 'source' must be one of the given source ids.
-- Report a one-line 'reason' per range explaining the choice.`;
 
-// The EDL ranges Claude produces. `sources` is supplied by the app, not the model.
-const RANGES_SCHEMA = {
-  type: "object",
-  properties: {
-    ranges: {
-      type: "array",
-      items: {
-        type: "object",
-        properties: {
-          source: { type: "string" },
-          start: { type: "number" },
-          end: { type: "number" },
-          beat: { type: "string" },
-          quote: { type: "string" },
-          reason: { type: "string" },
-        },
-        required: ["source", "start", "end", "beat", "quote", "reason"],
-        additionalProperties: false,
-      },
-    },
-    grade: { type: "string" },
-    total_duration_s: { type: "number" },
-  },
-  required: ["ranges", "grade", "total_duration_s"],
-  additionalProperties: false,
-} as const;
+Respond with ONLY a JSON object, no prose, in exactly this shape:
+{
+  "ranges": [
+    {"source": "<one of the given source ids>", "start": <sec number>, "end": <sec number>,
+     "beat": "<short label e.g. HOOK>", "quote": "<transcript text>", "reason": "<one line>"}
+  ],
+  "grade": "<preset name like clean|warm_cinematic|neutral_punch, or empty string>",
+  "total_duration_s": <number>
+}
+'start'/'end' are seconds within the named source.`;
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== "POST") {
     res.status(405).json({ error: "POST only" });
+    return;
+  }
+  const key = process.env.GROQ_API_KEY;
+  if (!key) {
+    res.status(500).json({ error: "GROQ_API_KEY not set" });
     return;
   }
 
@@ -59,8 +49,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return;
   }
 
-  // On a re-edit turn, show Claude the current EDL and the user's feedback so it
-  // revises rather than starting over.
   const revision =
     Array.isArray(currentRanges) && currentRanges.length
       ? [
@@ -85,38 +73,46 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     .join("\n");
 
   try {
-    const response = await client.messages.create({
-      model: "claude-opus-4-8",
-      max_tokens: 16000,
-      thinking: { type: "adaptive" },
-      system: SYSTEM,
-      output_config: { format: { type: "json_schema", schema: RANGES_SCHEMA } },
-      messages: [{ role: "user", content: userMsg }],
+    const r = await fetch(GROQ_URL, {
+      method: "POST",
+      headers: { authorization: `Bearer ${key}`, "content-type": "application/json" },
+      body: JSON.stringify({
+        model: MODEL,
+        temperature: 0.3,
+        max_tokens: 8000,
+        response_format: { type: "json_object" },
+        messages: [
+          { role: "system", content: SYSTEM },
+          { role: "user", content: userMsg },
+        ],
+      }),
     });
 
-    const text = response.content.find((b) => b.type === "text");
-    if (!text || text.type !== "text") {
-      res.status(502).json({ error: "no structured output", stop: response.stop_reason });
+    if (!r.ok) {
+      const body = await r.text();
+      res.status(r.status === 429 ? 429 : 502).json({ error: `groq ${r.status}: ${body.slice(0, 300)}` });
       return;
     }
-    const decision = JSON.parse(text.text);
 
-    // Assemble the full EDL contract (src/lib/types.ts). App fills `sources`.
+    const data = await r.json();
+    const content = data?.choices?.[0]?.message?.content;
+    if (!content) {
+      res.status(502).json({ error: "no content from groq" });
+      return;
+    }
+    const decision = JSON.parse(content);
+    if (!Array.isArray(decision.ranges)) {
+      res.status(502).json({ error: "model did not return ranges[]" });
+      return;
+    }
+
     res.status(200).json({
       version: 1,
       ranges: decision.ranges,
-      grade: decision.grade,
+      grade: decision.grade || undefined,
       total_duration_s: decision.total_duration_s,
     });
   } catch (err) {
-    if (err instanceof Anthropic.RateLimitError) {
-      res.status(429).json({ error: "rate limited" });
-      return;
-    }
-    if (err instanceof Anthropic.APIError) {
-      res.status(err.status ?? 500).json({ error: err.message });
-      return;
-    }
     res.status(500).json({ error: String(err) });
   }
 }

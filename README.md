@@ -9,16 +9,19 @@
 ## 아키텍처
 
 ```
-Vercel (React + API)  ──►  Claude API      : 전사를 읽고 컷 결정(EDL) 추론
+Vercel (React + API)  ──►  Groq (무료 LLM)  : 전사를 읽고 컷 결정(EDL) 추론
        │
        ├──►  Supabase   : Auth · Postgres(projects/sources/edls/sessions) · Storage · Realtime
        │
        └──►  HF Space   : Whisper 전사 + ffmpeg 렌더 (무거운 연산)
 ```
 
+> 전부 **무료 티어**로 시작 가능합니다. 자세한 제약과 연결법은 [`SETUP.md`](SETUP.md).
+
 | 서비스 | 역할 |
 | --- | --- |
 | **Vercel** | React 프론트엔드 + 오케스트레이션 API 라우트 |
+| **Groq** | 컷 결정(LLM) — 무료, `/api/reason` |
 | **Supabase** | 로그인, DB, 영상/결과물 저장, 잡 상태 실시간 푸시 |
 | **Hugging Face** | 전사(Whisper) + ffmpeg 렌더 워커 (`worker/`) |
 

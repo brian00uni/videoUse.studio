@@ -1,7 +1,10 @@
-# SETUP — 직접 해야 할 부분
+# SETUP — 직접 해야 할 부분 (전부 무료)
 
-코드는 전부 구현·push 돼 있습니다. 아래 **외부 서비스 3개**만 연결하면 앱이 동작합니다.
-순서대로 따라 하세요. 예상 소요: 20~30분.
+코드는 전부 구현·push 돼 있습니다. 아래 **외부 서비스**만 연결하면 앱이 동작합니다.
+**모두 무료 티어로 시작 가능**합니다(결제수단 불필요). 예상 소요: 20~30분.
+
+> 무료 제약 요약: Supabase Storage 1GB(짧은 클립 위주, 렌더 후 원본 정리),
+> HF 무료 CPU는 콜드스타트 느림, Vercel Hobby는 개인/테스트용.
 
 ---
 
@@ -62,7 +65,14 @@ Authentication → Providers → **Email** 활성 확인. 매직링크가 기본
 
 ---
 
-## 3. Vercel (프론트 배포 + Claude 호출)
+## 3. Groq (컷 결정 LLM · 무료)
+
+1. https://console.groq.com → 로그인(구글/깃허브) → **API Keys** → Create API Key.
+   신용카드 불필요, 무료 티어(rate limit 있음).
+2. 이 키가 `GROQ_API_KEY` (아래 Vercel env에 등록).
+   모델은 `llama-3.3-70b-versatile` 사용(코드에 기본값). 무료.
+
+## 4. Vercel (프론트 배포 + /api)
 
 1. https://vercel.com → **Import Git Repository** → `brian00uni/videoUse.studio`.
 2. Framework는 자동으로 **Vite** 감지. `/api`도 자동으로 서버리스 함수로 배포됩니다.
@@ -70,7 +80,7 @@ Authentication → Providers → **Email** 활성 확인. 매직링크가 기본
    - `VITE_SUPABASE_URL`
    - `VITE_SUPABASE_ANON_KEY`
    - `VITE_WORKER_URL`
-   - `ANTHROPIC_API_KEY`  ← Claude API 키 (https://console.anthropic.com)
+   - `GROQ_API_KEY`  ← 위 Groq 키 (무료)
 4. Deploy.
 
 ---
@@ -80,7 +90,7 @@ Authentication → Providers → **Email** 활성 확인. 매직링크가 기본
 ```bash
 cp .env.example .env.local
 # .env.local 에 VITE_SUPABASE_URL / ANON_KEY / WORKER_URL 채우기
-# 주의: 로컬에서 /api/reason(Claude)까지 돌리려면 `vercel dev` 사용 (ANTHROPIC_API_KEY 필요)
+# 주의: 로컬에서 /api/reason(Groq)까지 돌리려면 `vercel dev` 사용 (GROQ_API_KEY 필요)
 npm install
 npx vercel dev     # 프론트 + /api 함수 함께 실행
 # 또는 프론트만: npm run dev  (이 경우 컷 제안은 배포본에서 테스트)
@@ -94,7 +104,7 @@ npx vercel dev     # 프론트 + /api 함수 함께 실행
 - [ ] `0001_init.sql` 실행
 - [ ] `sources`, `renders` 버킷 생성 + 정책 SQL 실행
 - [ ] HF Space 배포 + URL 확보
-- [ ] Anthropic API 키 발급
+- [ ] Groq API 키 발급 (무료)
 - [ ] Vercel에 env 4개 등록 + 배포
 
 전부 끝나면: 로그인 → 영상 업로드 → 전사 → 컷 제안 → (대화로 재편집) → 렌더 → 다운로드.
